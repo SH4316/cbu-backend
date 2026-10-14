@@ -53,12 +53,14 @@ public class PostFreeboardService {
     @Transactional
     public PostDTO.PostFreeboardResponse getFreeBoard(Long postId, Long userId) {
         postFreeboardRepository.findByPostId(postId)
+                .filter(found -> !found.getPost().isDeleted())
                 .orElseThrow(() -> new EntityNotFoundException("FreeBoard Not Found"));
         postRepository.incrementViewCount(postId);
         // 벌크 UPDATE 는 영속성 컨텍스트를 건드리지 않는다. 비우지 않으면 아래 재조회가 캐시를 읽어
         // 방금 올린 조회수가 응답에 안 실린다(건의·소식과 같은 처리).
         entityManager.clear();
         PostFreeboard freeboard = postFreeboardRepository.findByPostId(postId)
+                .filter(found -> !found.getPost().isDeleted())
                 .orElseThrow(() -> new EntityNotFoundException("FreeBoard Not Found"));
         if (freeboard.isAnonymous()) {
             return postMapper.toPostFreeboardAnonymousInfoDTO(freeboard, userId);
