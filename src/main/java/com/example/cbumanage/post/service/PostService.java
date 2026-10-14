@@ -1,7 +1,13 @@
 package com.example.cbumanage.post.service;
 
 import com.example.cbumanage.freeboard.repository.PostFreeboardRepository;
+import com.example.cbumanage.global.error.BaseException;
+import com.example.cbumanage.global.error.ErrorCode;
 import com.example.cbumanage.group.entity.Group;
+import com.example.cbumanage.group.entity.enums.GroupMemberStatus;
+import com.example.cbumanage.group.repository.GroupMemberRepository;
+import com.example.cbumanage.report.entity.PostReport;
+import com.example.cbumanage.report.repository.PostReportRepository;
 import com.example.cbumanage.group.repository.GroupRepository;
 import com.example.cbumanage.post.dto.PostDTO;
 import com.example.cbumanage.post.entity.Post;
@@ -29,6 +35,8 @@ public class PostService {
     private final UserRepository userRepository;
     private final PostFreeboardRepository postFreeboardRepository;
     private final GroupRepository groupRepository;
+    private final GroupMemberRepository groupMemberRepository;
+    private final PostReportRepository postReportRepository;
 
     public Post createPost(PostDTO.PostCreateDTO postCreateDTO) {
         User author = userRepository.findById(postCreateDTO.authorId()).orElseThrow(() -> new EntityNotFoundException("User Not Found"));
@@ -38,16 +46,40 @@ public class PostService {
     }
 
 
-    public Page<PostDTO.PostInfoDTO> getPostsByCategory(Pageable pageable,int category){
-        Page<Post> posts=postRepository.findByCategoryAndIsDeletedFalse(category,pageable);
+    public Page<PostDTO.PostInfoDTO> getPostsByCategory(Pageable pageable, int category, Long userId){
+        Page<Post> posts;
+        if (category == PostCategory.REPORT.getValue() && !getUser(userId).getRole().canViewAllReports()) {
+            // 권한 조건을 페이지 조회 전에 적용해야 목록 개수와 전체 페이지 수가 일치한다.
+            posts = postRepository.findVisibleReports(userId, pageable);
+        } else {
+            posts = postRepository.findByCategoryAndIsDeletedFalse(category, pageable);
+        }
         return posts.map(this::toPostInfoDTO);
     }
 
 
-    public PostDTO.PostInfoDTO getPostById(Long postId){
+    public PostDTO.PostInfoDTO getPostById(Long postId, Long userId){
         // 목록은 isDeleted 를 걸렀지만 상세는 안 걸러서, 지운 글을 id 로 직접 부르면 본문이 그대로 나왔다.
         Post post=postRepository.findByIdAndIsDeletedFalse(postId).orElseThrow(() -> new EntityNotFoundException("Post Not Found"));
+        if (post.getCategory() == PostCategory.REPORT.getValue()) {
+            validateReportAccess(post, userId);
+        }
         return toPostInfoDTO(post);
+    }
+
+    private User getUser(Long userId) {
+        return userRepository.findById(userId).orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
+    }
+
+    private void validateReportAccess(Post post, Long userId) {
+        if (getUser(userId).getRole().canViewAllReports() || userId.equals(post.getAuthorId())) {
+            return;
+        }
+        PostReport report = postReportRepository.findByPostId(post.getId())
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND));
+        if (!groupMemberRepository.existsActiveMember(userId, report.getGroupId(), GroupMemberStatus.ACTIVE)) {
+            throw new BaseException(ErrorCode.FORBIDDEN);
+        }
     }
 
     /** 공통 DTO. 익명이 강제된 글이면 작성자 필드를 비워서 어느 경로로도 이름이 새지 않게 한다 */

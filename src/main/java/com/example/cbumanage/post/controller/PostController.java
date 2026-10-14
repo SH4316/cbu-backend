@@ -50,15 +50,16 @@ public class PostController {
     @GetMapping("post")
     public ApiResponse<Page<PostDTO.PostInfoDTO>> getPosts(@Parameter(description = "페이지 번호(0부터 시작)") @RequestParam int page,
                                                             @Parameter(description = "페이지당 조회 개수") @RequestParam int size,
-                                                            @Parameter(description = "게시글 카테고리 번호") @RequestParam int category) {
+                                                            @Parameter(description = "게시글 카테고리 번호") @RequestParam int category,
+                                                            Authentication authentication) {
         Pageable pageable = Pageables.of(page, size, Sort.by(Sort.Order.desc("createdAt")));
-        return ApiResponse.success(postService.getPostsByCategory(pageable, category));
+        return ApiResponse.success(postService.getPostsByCategory(pageable, category, Long.parseLong(authentication.getName())));
     }
 
     @Operation(summary = "게시글 상세 조회", description = "게시글 ID로 공통 게시글 정보를 조회합니다.")
     @GetMapping("post/{postId}/post")
-    public ApiResponse<PostDTO.PostInfoDTO> getPost(@PathVariable Long postId) {
-        return ApiResponse.success(postService.getPostById(postId));
+    public ApiResponse<PostDTO.PostInfoDTO> getPost(@PathVariable Long postId, Authentication authentication) {
+        return ApiResponse.success(postService.getPostById(postId, Long.parseLong(authentication.getName())));
     }
 
     @Operation(summary = "게시글 삭제", description = "작성자 또는 관리자가 게시글을 소프트 삭제합니다.")

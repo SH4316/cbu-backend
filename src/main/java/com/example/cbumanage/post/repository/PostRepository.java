@@ -19,6 +19,21 @@ public interface PostRepository extends JpaRepository<Post, Long> {
 
     Page<Post> findByCategoryAndIsDeletedFalse(int category, Pageable pageable);
 
+    @Query("""
+        select p from Post p
+        where p.category = 7 and p.isDeleted = false
+          and (p.authorId = :userId or exists (
+              select r.id from PostReport r
+              where r.post = p and exists (
+                  select gm.id from GroupMember gm
+                  where gm.group.id = r.groupId and gm.user.userId = :userId
+                    and gm.groupMemberStatus = com.example.cbumanage.group.entity.enums.GroupMemberStatus.ACTIVE
+                    and gm.group.isDeleted = false
+              )
+          ))
+        """)
+    Page<Post> findVisibleReports(@Param("userId") Long userId, Pageable pageable);
+
     Page<Post> findByTitleContainingAndIsDeletedFalse(String title, Pageable pageable);
 
     Page<Post> findByContentContainingAndIsDeletedFalse(String content, Pageable pageable);
