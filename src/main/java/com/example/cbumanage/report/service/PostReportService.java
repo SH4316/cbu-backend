@@ -65,9 +65,13 @@ public class PostReportService {
 
     @Transactional
     public PostDTO.PostReportCreateResponseDTO createPostReport(PostDTO.PostReportCreateRequestDTO req,Long userId) {
+        validateGroupApproved(req.groupId());
+        if (!groupMemberRepository.existsByGroupIdAndUserUserIdAndGroupMemberStatus(
+                req.groupId(), userId, GroupMemberStatus.ACTIVE)) {
+            throw new BaseException(ErrorCode.FORBIDDEN);
+        }
         PostDTO.PostCreateDTO postCreateDTO = postMapper.toPostCreateDTO(req,userId);
         Post post = postService.createPost(postCreateDTO);
-        validateGroupApproved(req.groupId());
         PostDTO.ReportCreateDTO reportCreateDTO = postMapper.toReportCreateDTO(req, post.getId());
         PostReport report = createReport(reportCreateDTO);
         saveReportMembers(report.getId(), req.groupId(), req.memberIds());
