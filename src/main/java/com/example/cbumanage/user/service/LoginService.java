@@ -193,6 +193,11 @@ public class LoginService {
             throw new BaseException(ErrorCode.UNAUTHORIZED);
         }
 
+        // 메일 인증과 같은 주소별 시도 횟수를 사용해 재설정으로 제한을 우회하지 못하게 한다.
+        if (redisUtil.increaseWithExpire("mail:verify:" + request.email(), 10 * 60L) > 10L) {
+            throw new BaseException(ErrorCode.UNAUTHORIZED);
+        }
+
         String storedAuthCode = redisUtil.getData(request.email());
         if (storedAuthCode == null || !storedAuthCode.equals(request.authCode())) {
             throw new BaseException(ErrorCode.UNAUTHORIZED);
