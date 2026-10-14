@@ -79,7 +79,7 @@ public class PostReportService {
      * 화면에서 그룹 선택 목록을 걸러도 요청을 직접 보내면 통과하므로 서버에서도 막는다.
      */
     private void validateGroupApproved(Long groupId) {
-        Group group = groupRepository.findById(groupId)
+        Group group = groupRepository.findByIdAndIsDeletedFalse(groupId)
                 .orElseThrow(() -> new BaseException(ErrorCode.GROUP_NOT_FOUND));
         if (group.getStatus() != GroupStatus.ACTIVE) {
             throw new BaseException(
