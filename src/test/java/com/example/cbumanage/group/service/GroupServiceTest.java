@@ -4,19 +4,24 @@ import com.example.cbumanage.group.entity.Group;
 import com.example.cbumanage.group.entity.GroupMember;
 import com.example.cbumanage.group.entity.enums.GroupMemberRole;
 import com.example.cbumanage.group.entity.enums.GroupMemberStatus;
+import com.example.cbumanage.group.entity.enums.GroupRecruitmentStatus;
+import com.example.cbumanage.group.entity.enums.GroupStatus;
 import com.example.cbumanage.group.repository.GroupMemberRepository;
 import com.example.cbumanage.group.repository.GroupRepository;
 import com.example.cbumanage.group.util.GroupUtil;
 import com.example.cbumanage.global.error.BaseException;
 import com.example.cbumanage.global.error.ErrorCode;
 import com.example.cbumanage.comment.repository.CommentRepository;
+import com.example.cbumanage.project.entity.Project;
 import com.example.cbumanage.project.repository.ProjectRepository;
+import com.example.cbumanage.study.entity.Study;
 import com.example.cbumanage.study.repository.StudyRepository;
 import com.example.cbumanage.user.entity.User;
 import com.example.cbumanage.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -25,6 +30,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class GroupServiceTest {
@@ -156,4 +162,109 @@ class GroupServiceTest {
         assertThat(applicant.getMemberRejectReason()).isNull();
         assertThat(applicant.getRejectedCount()).isEqualTo(1);
     }
+
+    @Test
+    void 정원에_도달하면_남은_신청자를_거절하되_거절_횟수는_늘리지_않는다() {
+        Group group = group();
+        group.openRecruitment();
+        leaderOf(group);
+        GroupMember accepted = applicantIn(group, 70L);
+        GroupMember pending = GroupMember.create(group, user("pending@example.com"),
+                GroupMemberStatus.PENDING, GroupMemberRole.MEMBER);
+        GroupMember reapplied = GroupMember.create(group, user("reapplied@example.com"),
+                GroupMemberStatus.PENDING, GroupMemberRole.MEMBER);
+        reapplied.rejectByLeader("지난 거절");
+        reapplied.pending();
+        when(groupRepository.countByGroupIdAndStatus(GROUP_ID, GroupMemberStatus.ACTIVE)).thenReturn(4);
+        when(groupMemberRepository.findByGroupIdAndGroupMemberStatus(GROUP_ID, GroupMemberStatus.PENDING))
+                .thenReturn(List.of(pending, reapplied));
+        Project project = mock(Project.class);
+        Study study = mock(Study.class);
+        when(projectRepository.findByGroupId(GROUP_ID)).thenReturn(Optional.of(project));
+        when(studyRepository.findByGroupId(GROUP_ID)).thenReturn(Optional.of(study));
+
+        groupService.updateStatusGroupMember(70L, LEADER_ID, GroupMemberStatus.ACTIVE, null);
+
+        assertThat(accepted.getGroupMemberStatus()).isEqualTo(GroupMemberStatus.ACTIVE);
+        assertThat(group.getRecruitmentStatus()).isEqualTo(GroupRecruitmentStatus.CLOSED);
+        assertThat(group.getStatus()).isEqualTo(GroupStatus.PENDING);
+        assertThat(pending.getGroupMemberStatus()).isEqualTo(GroupMemberStatus.REJECTED);
+        assertThat(pending.getRejectedCount()).isZero();
+        assertThat(pending.getMemberRejectReason()).isEqualTo("모집이 마감되어 자동으로 거절되었습니다.");
+        assertThat(reapplied.getGroupMemberStatus()).isEqualTo(GroupMemberStatus.REJECTED);
+        assertThat(reapplied.getRejectedCount()).isEqualTo(1);
+        verify(project).updateRecruiting(false);
+        verify(study).updateRecruiting(false);
+    }
+
+    @Test
+    void 반려된_그룹이_정원에_도달하면_재심사_요청으로_전환된다() {
+        Group group = group();
+        group.reject("인원 보충 필요");
+        group.openRecruitment();
+        leaderOf(group);
+        GroupMember accepted = applicantIn(group, 71L);
+        when(groupRepository.countByGroupIdAndStatus(GROUP_ID, GroupMemberStatus.ACTIVE)).thenReturn(4);
+
+        groupService.updateStatusGroupMember(71L, LEADER_ID, GroupMemberStatus.ACTIVE, null);
+
+        assertThat(accepted.getGroupMemberStatus()).isEqualTo(GroupMemberStatus.ACTIVE);
+        assertThat(group.getRecruitmentStatus()).isEqualTo(GroupRecruitmentStatus.CLOSED);
+        assertThat(group.getStatus()).isEqualTo(GroupStatus.RESUBMITTED);
+    }
+
+    @Test
+    void 정원_미만에서는_수락해도_마감하거나_재심사를_요청하지_않는다() {
+        Group group = group();
+        group.reject("인원 보충 필요");
+        group.openRecruitment();
+        leaderOf(group);
+        GroupMember accepted = applicantIn(group, 72L);
+        when(groupRepository.countByGroupIdAndStatus(GROUP_ID, GroupMemberStatus.ACTIVE)).thenReturn(3);
+
+        groupService.updateStatusGroupMember(72L, LEADER_ID, GroupMemberStatus.ACTIVE, null);
+
+        assertThat(accepted.getGroupMemberStatus()).isEqualTo(GroupMemberStatus.ACTIVE);
+        assertThat(group.getRecruitmentStatus()).isEqualTo(GroupRecruitmentStatus.OPEN);
+        assertThat(group.getStatus()).isEqualTo(GroupStatus.REJECTED);
+        verify(groupMemberRepository, never()).findByGroupIdAndGroupMemberStatus(GROUP_ID, GroupMemberStatus.PENDING);
+        verifyNoInteractions(projectRepository, studyRepository);
+    }
+
+    @Test
+    void 이미_정원이_가득_차면_기존처럼_수락을_거부한다() {
+        Group group = group();
+        group.openRecruitment();
+        leaderOf(group);
+        GroupMember applicant = applicantIn(group, 73L);
+        when(groupRepository.countByGroupIdAndStatus(GROUP_ID, GroupMemberStatus.ACTIVE)).thenReturn(5);
+
+        assertThatThrownBy(() -> groupService.updateStatusGroupMember(73L, LEADER_ID, GroupMemberStatus.ACTIVE, null))
+                .isInstanceOf(BaseException.class)
+                .extracting(e -> ((BaseException) e).getErrorCode())
+                .isEqualTo(ErrorCode.GROUP_CAPACITY_EXCEEDED);
+        assertThat(applicant.getGroupMemberStatus()).isEqualTo(GroupMemberStatus.PENDING);
+        assertThat(group.getRecruitmentStatus()).isEqualTo(GroupRecruitmentStatus.OPEN);
+        verify(groupMemberRepository, never()).findByGroupIdAndGroupMemberStatus(GROUP_ID, GroupMemberStatus.PENDING);
+    }
+
+    @Test
+    void 수동_마감도_동일하게_대기자를_정리하고_반려된_그룹을_재심사_요청한다() {
+        Group group = group();
+        group.reject("인원 보충 필요");
+        group.openRecruitment();
+        leaderOf(group);
+        GroupMember pending = applicantIn(group, 74L);
+        when(groupRepository.countByGroupIdAndStatus(GROUP_ID, GroupMemberStatus.ACTIVE)).thenReturn(2);
+        when(groupMemberRepository.findByGroupIdAndGroupMemberStatus(GROUP_ID, GroupMemberStatus.PENDING))
+                .thenReturn(List.of(pending));
+
+        groupService.updateGroupRecruitment(GROUP_ID, LEADER_ID, GroupRecruitmentStatus.CLOSED);
+
+        assertThat(group.getStatus()).isEqualTo(GroupStatus.RESUBMITTED);
+        assertThat(group.getRecruitmentStatus()).isEqualTo(GroupRecruitmentStatus.CLOSED);
+        assertThat(pending.getGroupMemberStatus()).isEqualTo(GroupMemberStatus.REJECTED);
+        assertThat(pending.getRejectedCount()).isZero();
+    }
+
 }

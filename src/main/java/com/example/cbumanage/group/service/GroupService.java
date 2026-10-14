@@ -119,16 +119,19 @@ public class GroupService {
         } else {
             // 마감 조건은 경로와 무관하게 여기 하나로 판정한다 (모집 마감 API, 스터디/프로젝트 수정 폼 공통)
             assertClosableGroup(groupId);
-            // 모집 마감 시 대기(PENDING) 신청자는 전원 거절(REJECTED) 처리
-            rejectAllPendingMembers(groupId);
-            // 관리자가 반려(REJECTED)했던 그룹은 리더가 모집 마감(CLOSED)을 다시 누르면 재요청(RESUBMITTED)로 전환
-            if (group.getStatus() == GroupStatus.REJECTED) {
-                group.resubmit();
-            }
-            group.closeRecruitment();
+            closeGroupRecruitment(group);
         }
         projectRepository.findByGroupId(groupId).ifPresent(project -> project.updateRecruiting(recruiting));
         studyRepository.findByGroupId(groupId).ifPresent(study -> study.updateRecruiting(recruiting));
+    }
+
+    // 수동 마감과 정원 도달 시 자동 마감에 같은 상태 전이를 적용한다.
+    private void closeGroupRecruitment(Group group) {
+        rejectAllPendingMembers(group.getId());
+        if (group.getStatus() == GroupStatus.REJECTED) {
+            group.resubmit();
+        }
+        group.closeRecruitment();
     }
 
     /* 같은 팀에서 이 횟수만큼 거절되면 재신청을 받지 않는다 */
@@ -168,7 +171,7 @@ public class GroupService {
                 groupMember.active();
                 int activeCount = activeBefore + 1;
                 if (activeCount >= group.getMaxActiveMembers()) {
-                    group.closeRecruitment();
+                    closeGroupRecruitment(group);
                     projectRepository.findByGroupId(group.getId()).ifPresent(project -> project.updateRecruiting(false));
                     studyRepository.findByGroupId(group.getId()).ifPresent(study -> study.updateRecruiting(false));
                 }
