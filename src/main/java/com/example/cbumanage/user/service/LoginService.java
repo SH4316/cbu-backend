@@ -134,6 +134,10 @@ public class LoginService {
         User user = userRepository.findByUserUuidAndDeletedAtIsNull(userUuid)
                 .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND));
 
+        if (user.getRole() == Role.ROLE_USER && user.getMemberStatus() != MemberStatus.ACTIVE) {
+            throw new BaseException(ErrorCode.MEMBER_NOT_APPROVED);
+        }
+
         String storedToken = redisUtil.getData(REFRESH_KEY_PREFIX + user.getUserId());
         if (storedToken == null || !storedToken.equals(refreshToken)) {
             throw new BaseException(ErrorCode.UNAUTHORIZED);

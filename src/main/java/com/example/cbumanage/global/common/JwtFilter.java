@@ -1,5 +1,7 @@
 package com.example.cbumanage.global.common;
 
+import com.example.cbumanage.user.entity.MemberStatus;
+import com.example.cbumanage.user.entity.Role;
 import com.example.cbumanage.user.entity.User;
 import com.example.cbumanage.user.repository.UserRepository;
 import io.jsonwebtoken.Claims;
@@ -43,7 +45,8 @@ public class JwtFilter extends OncePerRequestFilter {
                 User user = userRepository.findByUserUuidAndDeletedAtIsNull(UUID.fromString(uuidStr)).orElse(null);
                 // 권한은 토큰의 role claim이 아니라 DB의 현재 role로 판정한다.
                 // claim을 쓰면 역할이 바뀌어도 토큰이 만료될 때까지 이전 권한이 유지된다.
-                if (user != null && user.getRole() != null) {
+                if (user != null && user.getRole() != null
+                        && (user.getRole() != Role.ROLE_USER || user.getMemberStatus() == MemberStatus.ACTIVE)) {
                     UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
                             String.valueOf(user.getUserId()), null,
                             List.of(new SimpleGrantedAuthority(user.getRole().name())));
