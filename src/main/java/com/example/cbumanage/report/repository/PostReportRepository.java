@@ -171,7 +171,7 @@ public interface PostReportRepository extends JpaRepository<PostReport, Long> {
             WHERE p.category = :category
               AND p.is_deleted = false
               AND (:startDate IS NULL OR r.`date` >= :startDate)
-              AND (:endDate IS NULL OR r.`date` <= :endDate)
+              AND (:endDate IS NULL OR r.`date` < :endDate)
               AND CONCAT(p.title, ' ', m.name) REGEXP :pattern
             ORDER BY p.created_at DESC, p.post_id DESC
             """,
@@ -183,7 +183,7 @@ public interface PostReportRepository extends JpaRepository<PostReport, Long> {
             WHERE p.category = :category
               AND p.is_deleted = false
               AND (:startDate IS NULL OR r.`date` >= :startDate)
-              AND (:endDate IS NULL OR r.`date` <= :endDate)
+              AND (:endDate IS NULL OR r.`date` < :endDate)
               AND CONCAT(p.title, ' ', m.name) REGEXP :pattern
             """,
         nativeQuery = true
@@ -206,7 +206,7 @@ public interface PostReportRepository extends JpaRepository<PostReport, Long> {
               AND (r.group_id IN :groupIds OR p.author_id = :authorId)
               AND p.is_deleted = false
               AND (:startDate IS NULL OR r.`date` >= :startDate)
-              AND (:endDate IS NULL OR r.`date` <= :endDate)
+              AND (:endDate IS NULL OR r.`date` < :endDate)
               AND CONCAT(p.title, ' ', m.name) REGEXP :pattern
             ORDER BY p.created_at DESC, p.post_id DESC
             """,
@@ -219,7 +219,7 @@ public interface PostReportRepository extends JpaRepository<PostReport, Long> {
               AND (r.group_id IN :groupIds OR p.author_id = :authorId)
               AND p.is_deleted = false
               AND (:startDate IS NULL OR r.`date` >= :startDate)
-              AND (:endDate IS NULL OR r.`date` <= :endDate)
+              AND (:endDate IS NULL OR r.`date` < :endDate)
               AND CONCAT(p.title, ' ', m.name) REGEXP :pattern
             """,
         nativeQuery = true
