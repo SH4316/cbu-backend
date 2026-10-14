@@ -111,7 +111,9 @@ public class ProjectService {
     //프로젝트 게시글 수정 메서드
     public void updateProject(PostDTO.ProjectUpdateDTO dto, Project project) {
         project.updateRecruitmentFields(dto.recruitmentFields());
-        project.updateRecruiting(dto.recruiting());
+        if (dto.recruiting() != null) {
+            project.updateRecruiting(dto.recruiting());
+        }
         project.updateDeadline(dto.deadline());
     }
 
@@ -136,9 +138,11 @@ public class ProjectService {
             if (req.maxMembers() != null) {
                 groupService.updateGroupMaxMember(project.getGroup().getId(), req.maxMembers());
             }
-            GroupRecruitmentStatus status = req.recruiting()
-                    ? GroupRecruitmentStatus.OPEN : GroupRecruitmentStatus.CLOSED;
-            groupService.updateGroupRecruitment(project.getGroup().getId(), userId, status);
+            if (req.recruiting() != null) {
+                GroupRecruitmentStatus status = req.recruiting()
+                        ? GroupRecruitmentStatus.OPEN : GroupRecruitmentStatus.CLOSED;
+                groupService.updateGroupRecruitment(project.getGroup().getId(), userId, status);
+            }
         }
     }
 
